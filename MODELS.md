@@ -178,6 +178,7 @@ class UserEvent(models.Model):
 
 ## Ключевые связи:
 
+```text
 User - Event (через UserEvent) - кто на каком мероприятии
 User - Talk - кто спикер в каком докладе
 Talk - Question - вопросы к конкретному докладу
@@ -185,3 +186,4 @@ User - Question - кто задал вопрос
 User - NetworkingMatch - кто с кем знакомится
 Event - Donation - донаты на конкретное мероприятие
 Event - Broadcast - рассылки по мероприятию
+```
