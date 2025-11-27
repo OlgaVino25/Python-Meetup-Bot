@@ -13,8 +13,8 @@ async def setup_bot(token: str):
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
-    #from .middlewares.django import DjangoORMMiddleware
-    #dp.update.middleware(DjangoORMMiddleware())
+    from .middlewares.django import DjangoORMMiddleware
+    dp.update.middleware(DjangoORMMiddleware())
     
     from .handlers import start, program, questions, networking, donations, help, admin, subscription, speaker
     dp.include_router(start.router)
