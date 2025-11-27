@@ -6,6 +6,7 @@ from .models import *
 class UserAdmin(admin.ModelAdmin):
     list_display = ["first_name", "telegram_id", "role", "company"]
     list_filter = ["role", "is_networking_active"]
+    list_editable = ["role",]
 
 
 @admin.register(Event)

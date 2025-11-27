@@ -1,6 +1,8 @@
 from aiogram import Router, types
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
+from asgiref.sync import sync_to_async
+from app_core.models import User
 from ..keyboards.main import get_main_keyboard
 
 router = Router()
@@ -8,20 +10,30 @@ router = Router()
 @router.message(CommandStart())
 @router.message(lambda message: message.text and "Назад" in message.text)
 async def on_start(message: types.Message, state: FSMContext):
+    tg = message.from_user
+
+    user, created = await sync_to_async(User.objects.get_or_create)(
+        telegram_id=str(tg.id),
+        defaults={
+            "first_name": tg.first_name or "",
+        },
+    )
+
     data = await state.get_data()
     is_listener_mode = data.get('is_listener_mode', False)
-    user_role = data.get('user_role', 'guest')
-    
+    user_role = user.role or 'guest'
+    await state.update_data(user_role=user_role)
+
     role_display = "спикер" if user_role == "speaker" else "гость"
     if user_role == "speaker" and is_listener_mode:
         role_display = "спикер (режим слушателя)"
-    
+
     help_text = (
         f"Привет, {message.from_user.first_name}!\n"
         f"Роль: {role_display}\n\n"
         "Доступные функции:\n\n"
     )
-    
+
     if user_role == "speaker" and not is_listener_mode:
         help_text += (
             "Режим спикера:\n"
@@ -41,10 +53,10 @@ async def on_start(message: types.Message, state: FSMContext):
             "• Подписаться - получать уведомления о новых событиях\n"
             "• Помощь - справочная информация\n"
         )
-        
+
         if user_role == "speaker":
             help_text += "\n• Режим спикера - вернуться в режим спикера"
-    
+
     await message.answer(
         help_text,
         reply_markup=get_main_keyboard(user_role, is_listener_mode)
