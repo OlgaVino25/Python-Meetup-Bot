@@ -12,6 +12,9 @@ Python Meetup Bot
 - app_core/ — приложение проекта
   - management/commands/runbot.py — запуск Telegram‑бота
   - bot/ — код бота (aiogram)
+    - handlers/ — обработчики сообщений
+    - keyboards/ — клавиатуры
+    - middlewares/ — промежуточное ПО
 - .env — переменные окружения (см. ниже)
 
 Подготовка окружения
