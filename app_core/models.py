@@ -30,39 +30,33 @@ class User(models.Model):
 
 class Event(models.Model):
     title = models.CharField(max_length=200)
-    date = models.DateField()
-    location = models.CharField(max_length=200)
     description = models.TextField()
-    is_active = models.BooleanField(default=True)
-    created_by = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="created_events"
-    )
+    start_date = models.DateTimeField()
+    end_date = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Мероприятие"
         verbose_name_plural = "Мероприятия"
 
     def __str__(self):
-        return f"{self.title} - {self.date}"
-
+        return self.title
 
 class Talk(models.Model):
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="talks")
-    speaker = models.ForeignKey(User, on_delete=models.CASCADE, related_name="talks")
+    speaker = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=200)
-    description = models.TextField()
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-    order = models.IntegerField(default=0)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE)
 
     class Meta:
         verbose_name = "Доклад"
         verbose_name_plural = "Доклады"
-        ordering = ["order", "start_time"]
+        ordering = ["start_time"]
 
     def __str__(self):
-        return f"{self.title} - {self.speaker.first_name}"
+        return f"{self.title} by {self.speaker.first_name}"
 
 
 class Question(models.Model):

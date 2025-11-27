@@ -11,7 +11,7 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ["title", "date", "location", "is_active"]
+    list_display = ["title", "start_date", "end_date"]
 
 
 @admin.register(Talk)
