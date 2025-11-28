@@ -2,11 +2,13 @@ from asgiref.sync import sync_to_async
 from app_core.models import Event, Talk
 from django.utils import timezone
 from datetime import timedelta
+import pytz
 
 @sync_to_async
 def get_todays_tomorrows_program():
     try:
-        now = timezone.now()
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        now = timezone.now().astimezone(moscow_tz)
         today = now.date()
         tomorrow = today + timedelta(days=1)
         
@@ -20,25 +22,39 @@ def get_todays_tomorrows_program():
         program_text = "🎪 Ближайшие митапы\n\n"
         
         for event in events:
-            event_date = event.start_date.date()
+            event_date = event.start_date.astimezone(moscow_tz).date()
             
             if event_date == today:
                 date_label = "🟢 СЕГОДНЯ"
             else:
                 date_label = "🟡 ЗАВТРА"
                 
-            program_text += f"{date_label} - {event.start_date.strftime('%d.%m.%Y')}\n"
+            program_text += f"{date_label} - {event.start_date.astimezone(moscow_tz).strftime('%d.%m.%Y')}\n"
             program_text += f"🎯 {event.title}\n"
-            program_text += f"🕐 {event.start_date.strftime('%H:%M')} - {event.end_date.strftime('%H:%M')}\n"
+            program_text += f"🕐 {event.start_date.astimezone(moscow_tz).strftime('%H:%M')} - {event.end_date.astimezone(moscow_tz).strftime('%H:%M')}\n"
             
             talks = Talk.objects.filter(event=event).order_by('start_time')
             
             if talks:
                 program_text += "\n🎤 Доклады:\n"
                 for i, talk in enumerate(talks, 1):
+                    # Корректируем время доклада
+                    if talk.start_time.tzinfo is None:
+                        talk_start = moscow_tz.localize(talk.start_time)
+                        talk_end = moscow_tz.localize(talk.end_time)
+                    else:
+                        talk_start = talk.start_time.astimezone(moscow_tz)
+                        talk_end = talk.end_time.astimezone(moscow_tz)
+                    
+                    # Дополнительная коррекция если время в UTC
+                    time_diff = (talk_start - now).total_seconds() / 3600
+                    if abs(time_diff) > 2:
+                        talk_start = talk_start - timedelta(hours=3)
+                        talk_end = talk_end - timedelta(hours=3)
+                    
                     status = "🔴 " if talk.is_active else ""
                     program_text += (
-                        f"{i}. {status}{talk.start_time.strftime('%H:%M')}-{talk.end_time.strftime('%H:%M')}\n"
+                        f"{i}. {status}{talk_start.strftime('%H:%M')}-{talk_end.strftime('%H:%M')}\n"
                         f"   👨‍💻 {talk.speaker.first_name}\n"
                         f"   📝 {talk.title}\n\n"
                     )
@@ -56,7 +72,8 @@ def get_todays_tomorrows_program():
 @sync_to_async
 def get_week_events_for_subscription():
     try:
-        now = timezone.now()
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        now = timezone.now().astimezone(moscow_tz)
         week_later = now + timedelta(days=7)
         
         events = Event.objects.filter(
@@ -69,7 +86,7 @@ def get_week_events_for_subscription():
         subscription_text = "🎪 Митапы на ближайшую неделю\n\n"
         
         for event in events:
-            days_until = (event.start_date.date() - now.date()).days
+            days_until = (event.start_date.astimezone(moscow_tz).date() - now.date()).days
             
             if days_until == 0:
                 when = "🟢 СЕГОДНЯ"
@@ -81,15 +98,25 @@ def get_week_events_for_subscription():
                 when = f"📅 Через {days_until} дн."
                 
             subscription_text += f"{when}\n"
-            subscription_text += f"📅 {event.start_date.strftime('%d.%m.%Y')}\n"
+            subscription_text += f"📅 {event.start_date.astimezone(moscow_tz).strftime('%d.%m.%Y')}\n"
             subscription_text += f"🎯 {event.title}\n"
-            subscription_text += f"🕐 {event.start_date.strftime('%H:%M')} - {event.end_date.strftime('%H:%M')}\n"
+            subscription_text += f"🕐 {event.start_date.astimezone(moscow_tz).strftime('%H:%M')} - {event.end_date.astimezone(moscow_tz).strftime('%H:%M')}\n"
             
             talks = Talk.objects.filter(event=event).order_by('start_time')[:3]
             if talks:
                 subscription_text += "🎤 Доклады:\n"
                 for i, talk in enumerate(talks, 1):
-                    subscription_text += f"   {i}. {talk.speaker.first_name}: {talk.title}\n"
+                    # Корректируем время доклада
+                    if talk.start_time.tzinfo is None:
+                        talk_start = moscow_tz.localize(talk.start_time)
+                    else:
+                        talk_start = talk.start_time.astimezone(moscow_tz)
+                    
+                    time_diff = (talk_start - now).total_seconds() / 3600
+                    if abs(time_diff) > 2:
+                        talk_start = talk_start - timedelta(hours=3)
+                    
+                    subscription_text += f"   {i}. {talk.speaker.first_name}: {talk.title} ({talk_start.strftime('%H:%M')})\n"
                 
                 remaining = Talk.objects.filter(event=event).count() - 3
                 if remaining > 0:
@@ -107,16 +134,39 @@ def get_week_events_for_subscription():
 
 @sync_to_async
 def get_current_talk():
-    now = timezone.now()
-    
+    """Получить текущий активный доклад"""
+    # Сначала проверяем явно помеченные активные доклады
     active_talk = Talk.objects.filter(is_active=True).first()
     if active_talk:
         return active_talk
     
-    return Talk.objects.filter(
-        start_time__lte=now,
-        end_time__gte=now
-    ).first()
+    # Если нет явно активных, ищем по времени
+    now = timezone.now()
+    moscow_tz = pytz.timezone('Europe/Moscow')
+    now_moscow = now.astimezone(moscow_tz)
+    
+    # Корректируем время для поиска
+    talks = Talk.objects.all()
+    for talk in talks:
+        # Применяем ту же коррекцию времени, что и в presentation.py
+        if talk.start_time.tzinfo is None:
+            talk_start = moscow_tz.localize(talk.start_time)
+            talk_end = moscow_tz.localize(talk.end_time)
+        else:
+            talk_start = talk.start_time.astimezone(moscow_tz)
+            talk_end = talk.end_time.astimezone(moscow_tz)
+        
+        # Коррекция UTC -> MSK если нужно
+        time_diff = (talk_start - now_moscow).total_seconds() / 3600
+        if abs(time_diff) > 2:
+            talk_start = talk_start - timedelta(hours=3)
+            talk_end = talk_end - timedelta(hours=3)
+        
+        # Проверяем, попадает ли текущее время в интервал доклада
+        if talk_start <= now_moscow <= talk_end:
+            return talk
+    
+    return None
 
 @sync_to_async
 def get_upcoming_events_for_notification():

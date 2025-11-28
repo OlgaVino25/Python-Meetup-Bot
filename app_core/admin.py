@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.utils import timezone
+import pytz
 from .models import *
 
 @admin.register(User)
@@ -20,13 +22,21 @@ class TalkInline(admin.TabularInline):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ["title", "start_date", "end_date", "talks_count"]
+    list_display = ["title", "start_date", "end_date", "get_talks_count"]  # Исправлено на get_talks_count
     list_filter = ["start_date"]
     inlines = [TalkInline]
     
-    def talks_count(self, obj):
+    def get_talks_count(self, obj):
         return obj.talk_set.count()
-    talks_count.short_description = "Докладов"
+    get_talks_count.short_description = "Докладов"
+    
+    def save_model(self, request, obj, form, change):
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        if obj.start_date and obj.start_date.tzinfo is None:
+            obj.start_date = moscow_tz.localize(obj.start_date)
+        if obj.end_date and obj.end_date.tzinfo is None:
+            obj.end_date = moscow_tz.localize(obj.end_date)
+        super().save_model(request, obj, form, change)
 
 @admin.register(Talk)
 class TalkAdmin(admin.ModelAdmin):
@@ -39,6 +49,14 @@ class TalkAdmin(admin.ModelAdmin):
         if db_field.name == "speaker":
             kwargs["queryset"] = User.objects.filter(role="speaker")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def save_model(self, request, obj, form, change):
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        if obj.start_time and obj.start_time.tzinfo is None:
+            obj.start_time = moscow_tz.localize(obj.start_time)
+        if obj.end_time and obj.end_time.tzinfo is None:
+            obj.end_time = moscow_tz.localize(obj.end_time)
+        super().save_model(request, obj, form, change)
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):

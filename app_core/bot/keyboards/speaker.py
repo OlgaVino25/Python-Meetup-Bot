@@ -38,3 +38,22 @@ def get_question_management_keyboard():
         ],
         resize_keyboard=True,
     )
+
+
+def get_speaker_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="Начать выступление"),
+                KeyboardButton(text="Завершить выступление"),
+            ],
+            [
+                KeyboardButton(text="Мои вопросы"),
+                KeyboardButton(text="Заявка спикером"),
+            ],
+            [
+                KeyboardButton(text="Режим слушателя"),
+            ],
+        ],
+        resize_keyboard=True,
+    )
