@@ -18,6 +18,7 @@ class User(models.Model):
     job_title = models.CharField(max_length=100, blank=True)
     bio = models.TextField(blank=True)
     is_networking_active = models.BooleanField(default=False)
+    is_subscribed = models.BooleanField(default=False, verbose_name="Подписка на уведомления")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -49,6 +50,7 @@ class Talk(models.Model):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     event = models.ForeignKey(Event, on_delete=models.CASCADE)
+    is_active = models.BooleanField(default=False, verbose_name="Активный доклад")
 
     class Meta:
         verbose_name = "Доклад"
@@ -136,19 +138,32 @@ class Broadcast(models.Model):
         return f"Рассылка от {self.sent_at}"
 
 
-class UserEvent(models.Model):
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="attended_events"
+class SpeakerApplication(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "На рассмотрении"),
+        ("approved", "Одобрена"), 
+        ("rejected", "Отклонена"),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="speaker_applications")
+    topic = models.CharField(max_length=200, verbose_name="Тема доклада")
+    description = models.TextField(verbose_name="Описание доклада")
+    duration = models.PositiveIntegerField(
+        verbose_name="Продолжительность (мин)", 
+        help_text="Рекомендуется 15-45 минут"
     )
-    event = models.ForeignKey(
-        Event, on_delete=models.CASCADE, related_name="participants"
+    status = models.CharField(
+        max_length=20, 
+        choices=STATUS_CHOICES, 
+        default="pending"
     )
-    registered_at = models.DateTimeField(auto_now_add=True)
-
+    created_at = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True, verbose_name="Заметки организатора")
+    
     class Meta:
-        verbose_name = "Участие в мероприятии"
-        verbose_name_plural = "Участия в мероприятиях"
-        unique_together = ["user", "event"]
-
+        verbose_name = "Заявка спикера"
+        verbose_name_plural = "Заявки спикеров"
+        ordering = ["-created_at"]
+    
     def __str__(self):
-        return f"{self.user.first_name} на {self.event.title}"
+        return f"{self.topic} - {self.user.first_name} ({self.get_status_display()})"

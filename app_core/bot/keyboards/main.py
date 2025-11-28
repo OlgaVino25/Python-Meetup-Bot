@@ -1,6 +1,5 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-
 def get_guest_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -10,7 +9,6 @@ def get_guest_keyboard():
         ],
         resize_keyboard=True,
     )
-
 
 def get_speaker_keyboard():
     return ReplyKeyboardMarkup(
@@ -28,7 +26,6 @@ def get_speaker_keyboard():
         resize_keyboard=True,
     )
 
-
 def get_listener_mode_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -40,12 +37,20 @@ def get_listener_mode_keyboard():
         resize_keyboard=True,
     )
 
-
 def get_back_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="Назад")]], resize_keyboard=True
     )
 
+def get_program_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🟢 Сегодня и завтра")],
+            [KeyboardButton(text="📅 Митапы на неделю")],
+            [KeyboardButton(text="Назад")]
+        ],
+        resize_keyboard=True
+    )
 
 def get_main_keyboard(user_role="guest", is_listener_mode=False):
     if user_role == "speaker" and not is_listener_mode:
@@ -54,7 +59,6 @@ def get_main_keyboard(user_role="guest", is_listener_mode=False):
         return get_listener_mode_keyboard()
     else:
         return get_guest_keyboard()
-
 
 def get_networking_keyboard():
     return ReplyKeyboardMarkup(

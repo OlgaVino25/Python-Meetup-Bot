@@ -14,18 +14,32 @@ async def setup_bot(token: str):
     dp = Dispatcher(storage=storage)
     
     from .middlewares.django import DjangoORMMiddleware
-    dp.update.middleware(DjangoORMMiddleware())
     
-    from .handlers import start, program, questions, networking, donations, help, admin, subscription, speaker
-    dp.include_router(start.router)
-    dp.include_router(program.router)
-    dp.include_router(questions.router)
-    dp.include_router(networking.router)
-    dp.include_router(donations.router)
-    dp.include_router(help.router)
-    dp.include_router(admin.router)
-    dp.include_router(subscription.router)
-    dp.include_router(speaker.speaker_router)
+    dp.update.outer_middleware(DjangoORMMiddleware())
+    dp.message.middleware(DjangoORMMiddleware())
+    dp.callback_query.middleware(DjangoORMMiddleware())
+    
+    from .handlers import (
+        start_router, 
+        program_router, 
+        questions_router, 
+        networking_router, 
+        donations_router, 
+        help_router, 
+        admin_router, 
+        subscription_router,
+        speaker_router
+    )
+    
+    dp.include_router(start_router)
+    dp.include_router(program_router)
+    dp.include_router(questions_router)
+    dp.include_router(networking_router)
+    dp.include_router(donations_router)
+    dp.include_router(help_router)
+    dp.include_router(admin_router)
+    dp.include_router(subscription_router)
+    dp.include_router(speaker_router)
     
     return bot, dp
 
