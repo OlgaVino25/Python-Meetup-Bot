@@ -3,6 +3,7 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from asgiref.sync import sync_to_async
 import pytz
+import logging
 
 from app_core.models import Talk, Event, User, Question
 from ...states.speaker import SpeakerStates
@@ -11,7 +12,7 @@ from ...keyboards.speaker import get_speaker_keyboard
 from django.utils import timezone
 
 router = Router()
-
+logger = logging.getLogger(__name__)
 
 @router.message(lambda message: message.text and "Начать выступление" in message.text)
 async def start_presentation(message: types.Message, state: FSMContext):
@@ -29,73 +30,78 @@ async def start_presentation(message: types.Message, state: FSMContext):
         
         if not today_events:
             await message.answer(
-                "❌ На сегодня нет мероприятий\n\n"
-                "Нельзя начать выступление без запланированного мероприятия.",
+                "❌ На сегодня нет мероприятий",
                 reply_markup=get_back_keyboard(),
             )
             return
 
         current_event = today_events[0]
 
-        talk = await sync_to_async(
-            Talk.objects.filter(
-                event=current_event,
-                speaker__telegram_id=str(user.id)
-            ).first
+        user_talks = await sync_to_async(
+            lambda: list(
+                Talk.objects.filter(
+                    event=current_event,
+                    speaker__telegram_id=str(user.id)
+                ).order_by('start_time')
+            )
         )()
 
-        if not talk:
+        if not user_talks:
             await message.answer(
-                "❌ Не найдено запланированных выступлений\n\n"
-                "У вас нет докладов на сегодняшнем мероприятии.",
+                "❌ У вас нет докладов на сегодняшнем мероприятии",
                 reply_markup=get_back_keyboard(),
             )
             return
 
-        if talk.start_time.tzinfo is None:
-            talk_start_moscow = moscow_tz.localize(talk.start_time)
-            talk_end_moscow = moscow_tz.localize(talk.end_time)
+        current_user_talk = None
+        for talk in user_talks:
+            if talk.start_time.tzinfo is None:
+                talk_start_moscow = moscow_tz.localize(talk.start_time)
+                talk_end_moscow = moscow_tz.localize(talk.end_time)
+            else:
+                talk_start_moscow = talk.start_time.astimezone(moscow_tz)
+                talk_end_moscow = talk.end_time.astimezone(moscow_tz)
+
+            can_start_time = talk_start_moscow - timedelta(minutes=5)
+            can_end_time = talk_end_moscow + timedelta(minutes=10)
+
+            if can_start_time <= now_moscow <= can_end_time:
+                current_user_talk = talk
+                break
+
+        if not current_user_talk:
+            talks_info = ""
+            for i, talk in enumerate(user_talks, 1):
+                if talk.start_time.tzinfo is None:
+                    talk_start = moscow_tz.localize(talk.start_time)
+                    talk_end = moscow_tz.localize(talk.end_time)
+                else:
+                    talk_start = talk.start_time.astimezone(moscow_tz)
+                    talk_end = talk.end_time.astimezone(moscow_tz)
+                
+                talks_info += f"{i}. {talk_start.strftime('%H:%M')}-{talk_end.strftime('%H:%M')} - {talk.title}\n"
+            
+            await message.answer(
+                f"❌ Сейчас не время для ваших выступлений\n\n"
+                f"📋 Ваши доклады на сегодня:\n{talks_info}\n"
+                f"🕐 Текущее время: {now_moscow.strftime('%H:%M')}\n\n"
+                f"Вы можете начать выступление за 5 минут до начала и в течение 10 минут после окончания доклада.",
+                reply_markup=get_back_keyboard(),
+            )
+            return
+
+        if current_user_talk.start_time.tzinfo is None:
+            talk_start_moscow = moscow_tz.localize(current_user_talk.start_time)
+            talk_end_moscow = moscow_tz.localize(current_user_talk.end_time)
         else:
-            talk_start_moscow = talk.start_time.astimezone(moscow_tz)
-            talk_end_moscow = talk.end_time.astimezone(moscow_tz)
-        
-        time_diff = (talk_start_moscow - now_moscow).total_seconds() / 3600
-        if abs(time_diff) > 2:
-            talk_start_moscow = talk_start_moscow - timedelta(hours=3)
-            talk_end_moscow = talk_end_moscow - timedelta(hours=3)
-
-        can_start_time = talk_start_moscow
-        can_end_time = talk_end_moscow + timedelta(minutes=10)
-
-        if now_moscow < can_start_time:
-            time_diff = (can_start_time - now_moscow).total_seconds() / 60
-            await message.answer(
-                f"❌ Слишком рано начинать выступление\n\n"
-                f"Вы можете начать выступление только во время вашего доклада.\n"
-                f"Ваш доклад начнется в {talk_start_moscow.strftime('%H:%M')}\n"
-                f"Сейчас: {now_moscow.strftime('%H:%M')}\n"
-                f"Осталось: {time_diff:.0f} минут",
-                reply_markup=get_back_keyboard(),
-            )
-            return
-
-        if now_moscow > can_end_time:
-            time_diff = (now_moscow - can_end_time).total_seconds() / 60
-            await message.answer(
-                f"❌ Слишком поздно начинать выступление\n\n"
-                f"Вы можете начать выступление только в течение 10 минут после окончания доклада.\n"
-                f"Ваш доклад закончился в {talk_end_moscow.strftime('%H:%M')}\n"
-                f"Сейчас: {now_moscow.strftime('%H:%M')}\n"
-                f"Прошло: {time_diff:.0f} минут",
-                reply_markup=get_back_keyboard(),
-            )
-            return
+            talk_start_moscow = current_user_talk.start_time.astimezone(moscow_tz)
+            talk_end_moscow = current_user_talk.end_time.astimezone(moscow_tz)
 
         active_talk = await sync_to_async(
-            Talk.objects.filter(event=current_event, is_active=True).first
+            lambda: Talk.objects.filter(event=current_event, is_active=True).first()
         )()
         
-        if active_talk and active_talk.id != talk.id:
+        if active_talk and active_talk.id != current_user_talk.id:
             await message.answer(
                 f"❌ Сейчас выступает другой спикер\n\n"
                 f"Активный доклад: {active_talk.title}\n"
@@ -106,22 +112,22 @@ async def start_presentation(message: types.Message, state: FSMContext):
             return
 
         await sync_to_async(
-            Talk.objects.filter(event=current_event, is_active=True).update
-        )(is_active=False)
+            lambda: Talk.objects.filter(event=current_event, is_active=True).update(is_active=False)
+        )()
 
-        talk.is_active = True
-        await sync_to_async(talk.save)()
+        current_user_talk.is_active = True
+        await sync_to_async(current_user_talk.save)()
 
         await state.set_state(SpeakerStates.presentation_active)
         await state.update_data(
-            active_talk_id=talk.id, 
+            active_talk_id=current_user_talk.id, 
             event_id=current_event.id,
-            talk_title=talk.title
+            talk_title=current_user_talk.title
         )
 
         await message.answer(
             f"🎤 Вы начали выступление!\n\n"
-            f"📝 <b>Тема:</b> {talk.title}\n"
+            f"📝 <b>Тема:</b> {current_user_talk.title}\n"
             f"⏱ <b>Время:</b> {talk_start_moscow.strftime('%H:%M')} - {talk_end_moscow.strftime('%H:%M')}\n\n"
             f"Теперь участники могут отправлять вам вопросы через бота.\n"
             f"Вопросы будут приходить в реальном времени.\n\n"
@@ -131,6 +137,7 @@ async def start_presentation(message: types.Message, state: FSMContext):
         )
 
     except Exception as e:
+        logger.error(f"Error starting presentation: {e}")
         await message.answer(
             "❌ Произошла ошибка при начале выступления\n\n"
             "Попробуйте еще раз или обратитесь к организатору.",
@@ -144,10 +151,10 @@ async def end_presentation(message: types.Message, state: FSMContext):
     
     try:
         active_talk = await sync_to_async(
-            Talk.objects.filter(
+            lambda: Talk.objects.filter(
                 speaker__telegram_id=str(user.id),
                 is_active=True
-            ).first
+            ).first()
         )()
         
         if not active_talk:
@@ -156,10 +163,12 @@ async def end_presentation(message: types.Message, state: FSMContext):
             
             if active_talk_id:
                 try:
-                    active_talk = await sync_to_async(Talk.objects.get)(
-                        id=active_talk_id,
-                        speaker__telegram_id=str(user.id)
-                    )
+                    active_talk = await sync_to_async(
+                        lambda: Talk.objects.get(
+                            id=active_talk_id,
+                            speaker__telegram_id=str(user.id)
+                        )
+                    )()
                 except Talk.DoesNotExist:
                     active_talk = None
         
@@ -176,10 +185,10 @@ async def end_presentation(message: types.Message, state: FSMContext):
         await state.clear()
         
         questions_count = await sync_to_async(
-            Question.objects.filter(talk=active_talk).count
+            lambda: Question.objects.filter(talk=active_talk).count()
         )()
         unanswered_count = await sync_to_async(
-            Question.objects.filter(talk=active_talk, is_answered=False).count
+            lambda: Question.objects.filter(talk=active_talk, is_answered=False).count()
         )()
         
         success_message = (
@@ -200,6 +209,7 @@ async def end_presentation(message: types.Message, state: FSMContext):
         )
         
     except Exception as e:
+        logger.error(f"Error ending presentation: {e}")
         await message.answer(
             "❌ Произошла ошибка при завершении выступления\n\n"
             "Попробуйте еще раз или обратитесь к организатору.",
