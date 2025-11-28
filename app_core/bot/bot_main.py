@@ -33,13 +33,14 @@ async def setup_bot(token: str):
     
     dp.include_router(start_router)
     dp.include_router(program_router)
+    dp.include_router(speaker_router)
     dp.include_router(questions_router)
     dp.include_router(networking_router)
     dp.include_router(donations_router)
     dp.include_router(help_router)
     dp.include_router(admin_router)
     dp.include_router(subscription_router)
-    dp.include_router(speaker_router)
+
     
     return bot, dp
 
