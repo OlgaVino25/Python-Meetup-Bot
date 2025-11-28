@@ -1,10 +1,8 @@
-# bot_main.py
 import os
 import asyncio
 import django
 import logging
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -31,9 +29,9 @@ async def setup_bot(token: str):
         questions_router, 
         networking_router, 
         donations_router, 
-        help_router, 
         subscription_router,
-        speaker_router
+        speaker_router,
+        speaker_application_router
     )
     
     dp.include_router(start_router)
@@ -42,13 +40,12 @@ async def setup_bot(token: str):
     dp.include_router(questions_router)
     dp.include_router(networking_router)
     dp.include_router(donations_router)
-    dp.include_router(help_router)
     dp.include_router(subscription_router)
+    dp.include_router(speaker_application_router)
 
     return bot, dp
 
 async def start_bot_with_scheduler(token: str):
-    """Запуск бота с планировщиком уведомлений"""
     bot, dp = await setup_bot(token)
     
     from .services.scheduler import NotificationScheduler
@@ -69,5 +66,4 @@ async def start_bot_with_scheduler(token: str):
         logger.info("Бот остановлен")
 
 def run(token: str):
-    """Основная функция запуска бота"""
     asyncio.run(start_bot_with_scheduler(token))

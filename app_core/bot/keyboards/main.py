@@ -5,7 +5,7 @@ def get_guest_keyboard():
         keyboard=[
             [KeyboardButton(text="Программа"), KeyboardButton(text="Вопрос")],
             [KeyboardButton(text="Знакомства"), KeyboardButton(text="Донат")],
-            [KeyboardButton(text="Подписаться"), KeyboardButton(text="Помощь")],
+            [KeyboardButton(text="Подписаться"), KeyboardButton(text="Заявка спикером")],
         ],
         resize_keyboard=True,
     )
@@ -19,7 +19,6 @@ def get_speaker_keyboard():
             ],
             [
                 KeyboardButton(text="Мои вопросы"),
-                KeyboardButton(text="Заявка спикером"),
             ],
             [KeyboardButton(text="Режим слушателя")],
         ],
@@ -31,7 +30,7 @@ def get_listener_mode_keyboard():
         keyboard=[
             [KeyboardButton(text="Программа"), KeyboardButton(text="Вопрос")],
             [KeyboardButton(text="Знакомства"), KeyboardButton(text="Донат")],
-            [KeyboardButton(text="Подписаться"), KeyboardButton(text="Помощь")],
+            [KeyboardButton(text="Подписаться"), KeyboardButton(text="Заявка спикером")],
             [KeyboardButton(text="Режим спикера")],
         ],
         resize_keyboard=True,

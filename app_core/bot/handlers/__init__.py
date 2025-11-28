@@ -5,6 +5,7 @@ from .networking import router as networking_router
 from .donations import router as donations_router
 from .help import router as help_router
 from .subscription import router as subscription_router
+from .speaker_application import router as speaker_application_router
 from .speaker import speaker_router
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     'donations_router',
     'help_router',
     'subscription_router',
-    'speaker_router'
+    'speaker_router',
+    'speaker_application_router'
 ]
