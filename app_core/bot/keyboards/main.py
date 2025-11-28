@@ -42,6 +42,20 @@ def get_back_keyboard():
         keyboard=[[KeyboardButton(text="Назад")]], resize_keyboard=True
     )
 
+def get_donation_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="100 руб"),
+                KeyboardButton(text="300 руб"),
+                KeyboardButton(text="500 руб"),
+            ],
+            [KeyboardButton(text="Другая")],
+            [KeyboardButton(text="Назад")],
+        ],
+        resize_keyboard=True,
+    )
+
 def get_program_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[

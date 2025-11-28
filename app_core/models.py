@@ -80,7 +80,13 @@ class Question(models.Model):
 
 
 class Donation(models.Model):
-    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="donations")
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name="donations",
+        null=True,
+        blank=True,
+    )
     from_user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="donations"
     )
