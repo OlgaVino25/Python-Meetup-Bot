@@ -1,6 +1,12 @@
+# bot_main.py
 import os
 import asyncio
 import django
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pythonmeetup_service.settings')
 django.setup()
@@ -26,7 +32,6 @@ async def setup_bot(token: str):
         networking_router, 
         donations_router, 
         help_router, 
-        admin_router, 
         subscription_router,
         speaker_router
     )
@@ -38,19 +43,31 @@ async def setup_bot(token: str):
     dp.include_router(networking_router)
     dp.include_router(donations_router)
     dp.include_router(help_router)
-    dp.include_router(admin_router)
     dp.include_router(subscription_router)
 
-    
     return bot, dp
 
-async def start_bot(token: str):
+async def start_bot_with_scheduler(token: str):
+    """Запуск бота с планировщиком уведомлений"""
     bot, dp = await setup_bot(token)
     
+    from .services.scheduler import NotificationScheduler
+    
+    scheduler = NotificationScheduler(bot)
+    scheduler_task = asyncio.create_task(scheduler.start())
+    
     try:
+        logger.info("Бот запущен с планировщиком уведомлений")
         await dp.start_polling(bot)
+    except Exception as e:
+        logger.error(f"Ошибка при запуске бота: {e}")
     finally:
+        await scheduler.stop()
+        if not scheduler_task.done():
+            scheduler_task.cancel()
         await bot.session.close()
+        logger.info("Бот остановлен")
 
 def run(token: str):
-    asyncio.run(start_bot(token))
+    """Основная функция запуска бота"""
+    asyncio.run(start_bot_with_scheduler(token))

@@ -26,6 +26,7 @@ env.read_env(path=str(BASE_DIR / '.env'))
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env.str('DJANGO_SECRET_KEY', default='django-insecure-change-me')
+TELEGRAM_BOT_TOKEN = env.str('TELEGRAM_BOT_TOKEN')
 
 TELEGRAM_PAYMENTS_PROVIDER_TOKEN=env.str('TELEGRAM_PAYMENTS_PROVIDER_TOKEN')
 

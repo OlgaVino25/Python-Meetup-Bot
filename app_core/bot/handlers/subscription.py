@@ -2,13 +2,14 @@ from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from asgiref.sync import sync_to_async
+from django.utils import timezone
 from ..keyboards.main import get_back_keyboard, get_main_keyboard
 from ..keyboards.subscription import (
     get_subscription_confirmation_keyboard, 
     get_subscription_management_keyboard,
     get_simple_subscription_keyboard
 )
-from app_core.models import User
+from app_core.models import User, Event
 
 router = Router()
 
@@ -27,6 +28,15 @@ async def get_or_create_user(telegram_id, username, first_name, last_name):
             role="guest"
         )
 
+@sync_to_async
+def get_upcoming_events():
+    now = timezone.now()
+    future_events = Event.objects.filter(
+        start_date__gte=now
+    ).order_by('start_date')[:3]
+    
+    return list(future_events)
+
 @router.message(lambda message: message.text and "Подписаться" in message.text)
 async def handle_subscription(message: types.Message, state: FSMContext):
     
@@ -40,19 +50,46 @@ async def handle_subscription(message: types.Message, state: FSMContext):
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
     
     if user.is_subscribed:
+        upcoming_events = await get_upcoming_events()
+        events_info = ""
+        
+        if upcoming_events:
+            events_info = "\n\n📅 Ближайшие мероприятия:\n"
+            for event in upcoming_events:
+                days_until = (event.start_date.date() - timezone.now().date()).days
+                if days_until == 0:
+                    when = "сегодня"
+                elif days_until == 1:
+                    when = "завтра"
+                else:
+                    when = f"через {days_until} дн."
+                
+                events_info += f"• {event.title} ({when})\n"
+        
         await message.answer(
             "✅ Вы уже подписаны на уведомления!\n\n"
-            "Мы напомним вам за неделю до каждого митапа.\n\n"
-            "Чтобы посмотреть программу митапов, перейдите в раздел «Программа»",
+            "Мы напомним вам за неделю до каждого митапа." +
+            events_info +
+            "\nЧтобы посмотреть полную программу, перейдите в раздел «Программа»",
             reply_markup=get_subscription_management_keyboard(is_subscribed=True)
         )
         return
     
+    upcoming_events = await get_upcoming_events()
+    events_preview = ""
+    
+    if upcoming_events:
+        events_preview = "\n\nБлижайшие мероприятия:\n"
+        for event in upcoming_events[:2]:
+            days_until = (event.start_date.date() - timezone.now().date()).days
+            events_preview += f"• {event.title} (через {days_until} дн.)\n"
+    
     await message.answer(
         "🔔 Хотите подписаться на уведомления?\n\n"
         "Мы будем напоминать вам за неделю до каждого митапа,\n"
-        "чтобы вы не пропустили интересные встречи!\n\n"
-        "Программу митапов можно посмотреть в разделе «Программа»",
+        "чтобы вы не пропустили интересные встречи!" +
+        events_preview +
+        "\nПрограмму митапов можно посмотреть в разделе «Программа»",
         reply_markup=get_subscription_confirmation_keyboard()
     )
     
@@ -133,5 +170,6 @@ async def back_to_main_menu(message: types.Message, state: FSMContext):
     )
     
     await message.answer(
+        "Главное меню:",
         reply_markup=get_main_keyboard(user.role)
     )

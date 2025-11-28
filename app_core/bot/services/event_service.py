@@ -38,7 +38,6 @@ def get_todays_tomorrows_program():
             if talks:
                 program_text += "\n🎤 Доклады:\n"
                 for i, talk in enumerate(talks, 1):
-                    # Корректируем время доклада
                     if talk.start_time.tzinfo is None:
                         talk_start = moscow_tz.localize(talk.start_time)
                         talk_end = moscow_tz.localize(talk.end_time)
@@ -46,7 +45,6 @@ def get_todays_tomorrows_program():
                         talk_start = talk.start_time.astimezone(moscow_tz)
                         talk_end = talk.end_time.astimezone(moscow_tz)
                     
-                    # Дополнительная коррекция если время в UTC
                     time_diff = (talk_start - now).total_seconds() / 3600
                     if abs(time_diff) > 2:
                         talk_start = talk_start - timedelta(hours=3)
@@ -106,7 +104,6 @@ def get_week_events_for_subscription():
             if talks:
                 subscription_text += "🎤 Доклады:\n"
                 for i, talk in enumerate(talks, 1):
-                    # Корректируем время доклада
                     if talk.start_time.tzinfo is None:
                         talk_start = moscow_tz.localize(talk.start_time)
                     else:
@@ -134,21 +131,16 @@ def get_week_events_for_subscription():
 
 @sync_to_async
 def get_current_talk():
-    """Получить текущий активный доклад"""
-    # Сначала проверяем явно помеченные активные доклады
     active_talk = Talk.objects.filter(is_active=True).first()
     if active_talk:
         return active_talk
     
-    # Если нет явно активных, ищем по времени
     now = timezone.now()
     moscow_tz = pytz.timezone('Europe/Moscow')
     now_moscow = now.astimezone(moscow_tz)
     
-    # Корректируем время для поиска
     talks = Talk.objects.all()
     for talk in talks:
-        # Применяем ту же коррекцию времени, что и в presentation.py
         if talk.start_time.tzinfo is None:
             talk_start = moscow_tz.localize(talk.start_time)
             talk_end = moscow_tz.localize(talk.end_time)
@@ -156,13 +148,11 @@ def get_current_talk():
             talk_start = talk.start_time.astimezone(moscow_tz)
             talk_end = talk.end_time.astimezone(moscow_tz)
         
-        # Коррекция UTC -> MSK если нужно
         time_diff = (talk_start - now_moscow).total_seconds() / 3600
         if abs(time_diff) > 2:
             talk_start = talk_start - timedelta(hours=3)
             talk_end = talk_end - timedelta(hours=3)
         
-        # Проверяем, попадает ли текущее время в интервал доклада
         if talk_start <= now_moscow <= talk_end:
             return talk
     

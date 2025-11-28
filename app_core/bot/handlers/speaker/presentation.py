@@ -1,4 +1,3 @@
-# presentation.py - чистая версия без отладки
 from datetime import timedelta
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
@@ -16,17 +15,14 @@ router = Router()
 
 @router.message(lambda message: message.text and "Начать выступление" in message.text)
 async def start_presentation(message: types.Message, state: FSMContext):
-    """Начать выступление - активировать доклад спикера"""
     user = message.from_user
 
     try:
-        # Используем московское время
         moscow_tz = pytz.timezone('Europe/Moscow')
         now_utc = timezone.now()
         now_moscow = now_utc.astimezone(moscow_tz)
         today = now_moscow.date()
         
-        # Найдем мероприятия на сегодня
         today_events = await sync_to_async(list)(
             Event.objects.filter(start_date__date=today)
         )
@@ -41,7 +37,6 @@ async def start_presentation(message: types.Message, state: FSMContext):
 
         current_event = today_events[0]
 
-        # Ищем доклад спикера в текущем мероприятии
         talk = await sync_to_async(
             Talk.objects.filter(
                 event=current_event,
@@ -57,7 +52,6 @@ async def start_presentation(message: types.Message, state: FSMContext):
             )
             return
 
-        # Обработка времени доклада
         if talk.start_time.tzinfo is None:
             talk_start_moscow = moscow_tz.localize(talk.start_time)
             talk_end_moscow = moscow_tz.localize(talk.end_time)
@@ -65,13 +59,11 @@ async def start_presentation(message: types.Message, state: FSMContext):
             talk_start_moscow = talk.start_time.astimezone(moscow_tz)
             talk_end_moscow = talk.end_time.astimezone(moscow_tz)
         
-        # Коррекция UTC -> MSK если нужно
         time_diff = (talk_start_moscow - now_moscow).total_seconds() / 3600
         if abs(time_diff) > 2:
             talk_start_moscow = talk_start_moscow - timedelta(hours=3)
             talk_end_moscow = talk_end_moscow - timedelta(hours=3)
 
-        # Логика времени
         can_start_time = talk_start_moscow
         can_end_time = talk_end_moscow + timedelta(minutes=10)
 
@@ -99,7 +91,6 @@ async def start_presentation(message: types.Message, state: FSMContext):
             )
             return
 
-        # Проверяем, нет ли уже активного доклада
         active_talk = await sync_to_async(
             Talk.objects.filter(event=current_event, is_active=True).first
         )()
@@ -114,16 +105,13 @@ async def start_presentation(message: types.Message, state: FSMContext):
             )
             return
 
-        # Деактивируем все другие активные доклады
         await sync_to_async(
             Talk.objects.filter(event=current_event, is_active=True).update
         )(is_active=False)
 
-        # Активируем текущий доклад
         talk.is_active = True
         await sync_to_async(talk.save)()
 
-        # Сохраняем ID доклада в состоянии
         await state.set_state(SpeakerStates.presentation_active)
         await state.update_data(
             active_talk_id=talk.id, 
@@ -152,11 +140,9 @@ async def start_presentation(message: types.Message, state: FSMContext):
 
 @router.message(lambda message: message.text and "Завершить выступление" in message.text)
 async def end_presentation(message: types.Message, state: FSMContext):
-    """Завершить выступление - деактивировать доклад спикера"""
     user = message.from_user
     
     try:
-        # Ищем активный доклад пользователя в базе (основной способ)
         active_talk = await sync_to_async(
             Talk.objects.filter(
                 speaker__telegram_id=str(user.id),
@@ -165,7 +151,6 @@ async def end_presentation(message: types.Message, state: FSMContext):
         )()
         
         if not active_talk:
-            # Если не нашли в базе, проверяем состояние FSM
             user_data = await state.get_data()
             active_talk_id = user_data.get('active_talk_id')
             
@@ -185,14 +170,11 @@ async def end_presentation(message: types.Message, state: FSMContext):
             )
             return
         
-        # Деактивируем доклад
         active_talk.is_active = False
         await sync_to_async(active_talk.save)()
         
-        # Очищаем состояние FSM
         await state.clear()
         
-        # Получаем статистику вопросов
         questions_count = await sync_to_async(
             Question.objects.filter(talk=active_talk).count
         )()

@@ -36,6 +36,7 @@ class Event(models.Model):
     end_date = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    notification_sent = models.BooleanField(default=False, verbose_name="Уведомление отправлено")
 
     class Meta:
         verbose_name = "Мероприятие"
@@ -173,3 +174,39 @@ class SpeakerApplication(models.Model):
     
     def __str__(self):
         return f"{self.topic} - {self.user.first_name} ({self.get_status_display()})"
+    
+class MassNotification(models.Model):
+    STATUS_CHOICES = [
+        ('draft', 'Черновик'),
+        ('sending', 'Отправляется'),
+        ('sent', 'Отправлено'),
+        ('failed', 'Ошибка'),
+    ]
+    
+    title = models.CharField(max_length=200, verbose_name="Заголовок рассылки")
+    message = models.TextField(verbose_name="Текст сообщения")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft', verbose_name="Статус")
+    sent_to_count = models.PositiveIntegerField(default=0, verbose_name="Отправлено пользователям")
+    failed_count = models.PositiveIntegerField(default=0, verbose_name="Ошибок отправки")
+    target_users = models.CharField(
+        max_length=20,
+        choices=[('all', 'Все подписанные'), ('custom', 'Выбранные пользователи')],
+        default='all',
+        verbose_name="Целевые пользователи"
+    )
+    custom_users = models.ManyToManyField(
+        User, 
+        blank=True, 
+        verbose_name="Выбранные пользователи",
+        help_text="Выберите конкретных пользователей для рассылки"
+    )
+    sent_at = models.DateTimeField(null=True, blank=True, verbose_name="Время отправки")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
+    
+    class Meta:
+        verbose_name = "Массовая рассылка"
+        verbose_name_plural = "Массовые рассылки"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.title} ({self.get_status_display()})"
