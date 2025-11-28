@@ -44,11 +44,21 @@ class TalkInline(admin.TabularInline):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ["title", "start_date", "end_date", "get_talks_count", "notification_sent"]
-    list_filter = ["start_date", "notification_sent"]
-    list_editable = ["notification_sent"]
+    list_display = ["title", "start_date", "end_date", "get_talks_count", "notification_sent", "notification_sent_week", "notification_sent_day"]
+    list_filter = ["start_date", "notification_sent", "notification_sent_week", "notification_sent_day"]
+    list_editable = ["notification_sent", "notification_sent_week", "notification_sent_day"]
     inlines = [TalkInline]
-    actions = ['create_event_notification']
+    actions = ['create_event_notification', 'reset_notification_flags']
+    
+    def reset_notification_flags(self, request, queryset):
+        """Сбросить флаги уведомлений для выбранных мероприятий"""
+        updated = queryset.update(
+            notification_sent=False,
+            notification_sent_week=False,
+            notification_sent_day=False
+        )
+        self.message_user(request, f"Флаги уведомлений сброшены для {updated} мероприятий")
+    reset_notification_flags.short_description = "Сбросить флаги уведомлений"
     
     def get_talks_count(self, obj):
         return obj.talk_set.count()

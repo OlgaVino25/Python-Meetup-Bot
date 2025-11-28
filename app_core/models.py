@@ -37,6 +37,8 @@ class Event(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     notification_sent = models.BooleanField(default=False, verbose_name="Уведомление отправлено")
+    notification_sent_week = models.BooleanField(default=False, verbose_name="Напоминание за неделю отправлено")
+    notification_sent_day = models.BooleanField(default=False, verbose_name="Напоминание за день отправлено")
 
     class Meta:
         verbose_name = "Мероприятие"
