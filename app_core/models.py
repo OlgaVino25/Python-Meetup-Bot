@@ -105,30 +105,6 @@ class Donation(models.Model):
         return f"Донат {self.amount} от {self.from_user.first_name}"
 
 
-class NetworkingMatch(models.Model):
-    STATUS_CHOICES = [
-        ("pending", "Ожидает"),
-        ("accepted", "Принято"),
-        ("rejected", "Отклонено"),
-    ]
-
-    user1 = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="initiated_matches"
-    )
-    user2 = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="received_matches"
-    )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = "Знакомство"
-        verbose_name_plural = "Знакомства"
-        unique_together = ["user1", "user2"]
-
-    def __str__(self):
-        return f"{self.user1.first_name} ↔ {self.user2.first_name}"
-
 
 class Broadcast(models.Model):
     event = models.ForeignKey(
@@ -212,3 +188,40 @@ class MassNotification(models.Model):
     
     def __str__(self):
         return f"{self.title} ({self.get_status_display()})"
+    
+class NetworkingProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="networking_profile")
+    name = models.CharField(max_length=100, verbose_name="Имя для знакомств")
+    username = models.CharField(max_length=100, blank=True, verbose_name="Username для контактов")
+    company = models.CharField(max_length=100, blank=True, verbose_name="Компания")
+    job_title = models.CharField(max_length=100, blank=True, verbose_name="Должность")
+    interests = models.TextField(verbose_name="Интересы и темы для общения")
+    contact_consent = models.BooleanField(default=False, verbose_name="Согласие на обмен контактами")
+    is_visible = models.BooleanField(default=True, verbose_name="Видимость в поиске")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Анкета знакомств"
+        verbose_name_plural = "Анкеты знакомств"
+
+    def __str__(self):
+        return f"Анкета {self.name}"
+
+class NetworkingInteraction(models.Model):
+    STATUS_CHOICES = [
+        ('viewed', 'Просмотрено'),
+        ('liked', 'Понравилось'), 
+        ('rejected', 'Отклонено'),
+        ('matched', 'Взаимный интерес'),
+    ]
+    
+    viewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="viewed_profiles")
+    profile = models.ForeignKey(NetworkingProfile, on_delete=models.CASCADE, related_name="interactions")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='viewed')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Взаимодействие знакомств"
+        verbose_name_plural = "Взаимодействия знакомств"
+        unique_together = ['viewer', 'profile']

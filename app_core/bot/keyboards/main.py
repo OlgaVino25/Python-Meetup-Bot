@@ -73,12 +73,33 @@ def get_main_keyboard(user_role="guest", is_listener_mode=False):
     else:
         return get_guest_keyboard()
 
-def get_networking_keyboard():
+def get_networking_main_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="Заполнить анкету")],
-            [KeyboardButton(text="Найти собеседника")],
-            [KeyboardButton(text="Назад")],
+            [KeyboardButton(text="📝 Заполнить анкету")],
+            [KeyboardButton(text="👀 Найти собеседников")],
+            [KeyboardButton(text="📊 Моя анкета"), KeyboardButton(text="👁️ Управление видимостью")],
+            [KeyboardButton(text="👀 Кто вас лайкнул"), KeyboardButton(text="🤝 Ваши мэтчи")],
+            [KeyboardButton(text="🔄 Обновить поиск")],
+            [KeyboardButton(text="Назад")]
         ],
-        resize_keyboard=True,
+        resize_keyboard=True
+    )
+
+def get_networking_browsing_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="✅ Знакомиться!"), KeyboardButton(text="➡️ Следующий")],
+            [KeyboardButton(text="📊 Моя анкета"), KeyboardButton(text="🏠 В главное меню")]
+        ],
+        resize_keyboard=True
+    )
+
+def get_contact_consent_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="✅ Да, делиться контактом"), KeyboardButton(text="❌ Нет")],
+            [KeyboardButton(text="Назад")]
+        ],
+        resize_keyboard=True
     )

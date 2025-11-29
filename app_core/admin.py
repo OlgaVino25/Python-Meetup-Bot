@@ -21,7 +21,7 @@ class UserAdmin(admin.ModelAdmin):
 
     def send_custom_notification(self, request, queryset):
         message_title = "Сообщение от организаторов"
-        message_text = "У нас для вас важная информация! Следите за анонсами."
+        message_text = "У нас для вас важную информацию! Следите за анонсами."
         
         try:
             user_ids = [user.id for user in queryset]
@@ -119,17 +119,10 @@ class QuestionAdmin(admin.ModelAdmin):
         return obj.text[:50] + "..." if len(obj.text) > 50 else obj.text
     text_preview.short_description = "Вопрос"
 
-@admin.register(NetworkingMatch)
-class NetworkingMatchAdmin(admin.ModelAdmin):
-    list_display = ["user1", "user2", "status", "created_at"]
-    list_filter = ["status", "created_at"]
-    list_editable = ["status"]
-
 @admin.register(Donation)
 class DonationAdmin(admin.ModelAdmin):
     list_display = ["from_user", "event", "amount", "created_at"]
     list_filter = ["event", "created_at"]
-
 
 @admin.register(SpeakerApplication)
 class SpeakerApplicationAdmin(admin.ModelAdmin):
@@ -213,3 +206,138 @@ class MassNotificationAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related('custom_users')
+
+@admin.register(NetworkingProfile)
+class NetworkingProfileAdmin(admin.ModelAdmin):
+    list_display = [
+        "name", 
+        "user", 
+        "username_display", 
+        "company", 
+        "contact_consent", 
+        "is_visible", 
+        "created_at",
+        "get_likes_count",
+        "get_matches_count"
+    ]
+    list_filter = ["contact_consent", "is_visible", "created_at"]
+    list_editable = ["contact_consent", "is_visible"]
+    search_fields = ["name", "user__first_name", "user__telegram_id", "username", "company"]
+    readonly_fields = ["created_at", "updated_at", "stats_display"]
+    fieldsets = [
+        ("Основная информация", {
+            "fields": ["user", "name", "username", "company", "job_title", "interests"]
+        }),
+        ("Настройки видимости", {
+            "fields": ["contact_consent", "is_visible"]
+        }),
+        ("Статистика", {
+            "fields": ["stats_display", "created_at", "updated_at"],
+            "classes": ["collapse"]
+        }),
+    ]
+    
+    def username_display(self, obj):
+        if obj.username:
+            return f"@{obj.username}"
+        return "—"
+    username_display.short_description = "Username"
+    
+    def get_likes_count(self, obj):
+        return NetworkingInteraction.objects.filter(profile=obj, status='liked').count()
+    get_likes_count.short_description = "Лайков"
+    
+    def get_matches_count(self, obj):
+        return NetworkingInteraction.objects.filter(
+            models.Q(profile=obj, status='matched') | 
+            models.Q(viewer=obj.user, status='matched')
+        ).count()
+    get_matches_count.short_description = "Мэтчей"
+    
+    def stats_display(self, obj):
+        likes = NetworkingInteraction.objects.filter(profile=obj, status='liked').count()
+        matches = NetworkingInteraction.objects.filter(
+            models.Q(profile=obj, status='matched') | 
+            models.Q(viewer=obj.user, status='matched')
+        ).count()
+        return f"Лайков: {likes}, Мэтчей: {matches}"
+    stats_display.short_description = "Статистика"
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("user")
+
+@admin.register(NetworkingInteraction)
+class NetworkingInteractionAdmin(admin.ModelAdmin):
+    list_display = [
+        "viewer", 
+        "profile", 
+        "status_display", 
+        "created_at",
+        "is_mutual"
+    ]
+    list_filter = ["status", "created_at"]
+    search_fields = [
+        "viewer__first_name", 
+        "viewer__telegram_id",
+        "profile__name", 
+        "profile__user__first_name"
+    ]
+    readonly_fields = ["created_at", "mutual_info"]
+    fieldsets = [
+        ("Основная информация", {
+            "fields": ["viewer", "profile", "status"]
+        }),
+        ("Дополнительно", {
+            "fields": ["mutual_info", "created_at"],
+            "classes": ["collapse"]
+        }),
+    ]
+    
+    def status_display(self, obj):
+        status_icons = {
+            'viewed': '👀',
+            'liked': '💖', 
+            'rejected': '❌',
+            'matched': '🤝'
+        }
+        status_texts = {
+            'viewed': 'Просмотрено',
+            'liked': 'Лайк', 
+            'rejected': 'Отклонено',
+            'matched': 'Взаимный интерес'
+        }
+        icon = status_icons.get(obj.status, '⚪')
+        return f"{icon} {status_texts.get(obj.status, obj.status)}"
+    status_display.short_description = "Статус"
+    
+    def is_mutual(self, obj):
+        if obj.status == 'matched':
+            return "✅ Да"
+        elif obj.status == 'liked':
+            mutual = NetworkingInteraction.objects.filter(
+                viewer=obj.profile.user,
+                profile__user=obj.viewer,
+                status='liked'
+            ).exists()
+            return "🔄 Взаимный" if mutual else "➡️ Односторонний"
+        return "—"
+    is_mutual.short_description = "Взаимность"
+    
+    def mutual_info(self, obj):
+        if obj.status == 'liked':
+            mutual = NetworkingInteraction.objects.filter(
+                viewer=obj.profile.user,
+                profile__user=obj.viewer,
+                status='liked'
+            ).first()
+            if mutual:
+                return f"Взаимный лайк! Пользователь {obj.profile.name} тоже лайкнул {obj.viewer.first_name}"
+            else:
+                return "Односторонний лайк"
+        elif obj.status == 'matched':
+            return "Взаимный мэтч! Контакты были обменяны"
+        return "—"
+    mutual_info.short_description = "Информация о взаимности"
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("viewer", "profile", "profile__user")
