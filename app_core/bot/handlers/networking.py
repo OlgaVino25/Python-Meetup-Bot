@@ -17,6 +17,42 @@ from ..keyboards.main import (
 router = Router()
 logger = logging.getLogger(__name__)
 
+async def notify_waiting_users(new_profile, bot: Bot):
+    try:
+        existing_profiles = await sync_to_async(list)(
+            NetworkingProfile.objects.filter(is_visible=True)
+            .exclude(user=new_profile.user)
+            .select_related('user')
+        )
+        
+        if not existing_profiles:
+            return
+        
+        for profile in existing_profiles:
+            try:
+                await bot.send_message(
+                    chat_id=profile.user.telegram_id,
+                    text=f"🎉 Появился новый участник для знакомств!\n\n"
+                         f"👤 <b>{new_profile.name}</b>\n"
+                         f"🏢 <b>Компания:</b> {new_profile.company if new_profile.company else 'не указана'}\n"
+                         f"🎯 <b>Интересы:</b> {new_profile.interests[:100]}...\n\n"
+                         f"Хотите посмотреть анкету и начать общение?",
+                    reply_markup=ReplyKeyboardMarkup(
+                        keyboard=[
+                            [KeyboardButton(text="👀 Найти собеседников")],
+                            [KeyboardButton(text="Позже")]
+                        ],
+                        resize_keyboard=True
+                    ),
+                    parse_mode="HTML"
+                )
+                logger.info(f"✅ Уведомление отправлено пользователю {profile.user.telegram_id} о новой анкете")
+            except Exception as e:
+                logger.error(f"❌ Ошибка отправки уведомления пользователю {profile.user.telegram_id}: {e}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка в notify_waiting_users: {e}")
+
+
 @router.message(lambda message: message.text and "Знакомства" in message.text)
 async def networking_main(message: types.Message, state: FSMContext):
     """Главное меню знакомств"""
@@ -43,19 +79,45 @@ async def start_networking_profile(message: types.Message, state: FSMContext):
     )()
     
     if existing_profile:
-        await message.answer(
-            "📝 У вас уже есть анкета. Хотите её отредактировать?",
-            reply_markup=ReplyKeyboardMarkup(
-                keyboard=[
-                    [KeyboardButton(text="✏️ Редактировать анкету")],
-                    [KeyboardButton(text="❌ Удалить анкету")],
-                    [KeyboardButton(text="Назад")]
-                ],
-                resize_keyboard=True
+        # Проверяем, есть ли другие анкеты
+        other_profiles_count = await sync_to_async(
+            NetworkingProfile.objects.filter(is_visible=True)
+            .exclude(user=user)
+            .count
+        )()
+        
+        if other_profiles_count == 0 and existing_profile.is_visible:
+            # У пользователя есть анкета, но других анкет пока нет
+            await message.answer(
+                "📝 У вас уже есть анкета. Хотите её отредактировать?\n\n"
+                "⏳ <b>Статус:</b> Вы пока единственный участник. Ждем других!\n"
+                "🔔 <b>Уведомления:</b> Как только появятся новые анкеты, я вам сообщу.",
+                reply_markup=ReplyKeyboardMarkup(
+                    keyboard=[
+                        [KeyboardButton(text="✏️ Редактировать анкету")],
+                        [KeyboardButton(text="❌ Удалить анкету")],
+                        [KeyboardButton(text="Назад")]
+                    ],
+                    resize_keyboard=True
+                ),
+                parse_mode="HTML"
             )
-        )
+        else:
+            # Есть другие анкеты, показываем обычное меню
+            await message.answer(
+                "📝 У вас уже есть анкета. Хотите её отредактировать?",
+                reply_markup=ReplyKeyboardMarkup(
+                    keyboard=[
+                        [KeyboardButton(text="✏️ Редактировать анкету")],
+                        [KeyboardButton(text="❌ Удалить анкету")],
+                        [KeyboardButton(text="Назад")]
+                    ],
+                    resize_keyboard=True
+                )
+            )
         return
     
+    # Нет анкеты - начинаем заполнение
     await state.set_state(NetworkingStates.waiting_name)
     await message.answer(
         "📝 <b>Заполнение анкеты для знакомств</b>\n\n"
@@ -64,6 +126,7 @@ async def start_networking_profile(message: types.Message, state: FSMContext):
         reply_markup=get_back_keyboard(),
         parse_mode="HTML"
     )
+
 
 @router.message(lambda message: message.text and "✏️ Редактировать анкету" in message.text)
 async def handle_edit_profile(message: types.Message, state: FSMContext):
@@ -290,7 +353,7 @@ async def process_interests(message: types.Message, state: FSMContext):
     )
 
 @router.message(NetworkingStates.waiting_contact_consent)
-async def process_contact_consent(message: types.Message, state: FSMContext):
+async def process_contact_consent(message: types.Message, state: FSMContext, bot: Bot):
     """Обработка согласия на контакт"""
     user = await sync_to_async(User.objects.get)(telegram_id=str(message.from_user.id))
     
@@ -308,7 +371,6 @@ async def process_contact_consent(message: types.Message, state: FSMContext):
     editing_profile_id = data.get('editing_profile_id')
     
     if editing_profile_id:
-        # Редактирование существующей анкеты
         profile = await sync_to_async(NetworkingProfile.objects.get)(id=editing_profile_id)
         profile.name = data['name']
         profile.username = data.get('username', '')
@@ -320,7 +382,6 @@ async def process_contact_consent(message: types.Message, state: FSMContext):
         
         success_message = "✅ <b>Анкета обновлена!</b>"
     else:
-        # Создание новой анкеты
         profile = await sync_to_async(NetworkingProfile.objects.create)(
             user=user,
             name=data['name'],
@@ -331,10 +392,32 @@ async def process_contact_consent(message: types.Message, state: FSMContext):
             contact_consent=contact_consent
         )
         success_message = "🎉 <b>Анкета создана!</b>"
+        
+        other_profiles_count = await sync_to_async(
+            NetworkingProfile.objects.filter(is_visible=True)
+            .exclude(user=user)
+            .count
+        )()
+        
+        if other_profiles_count == 0:
+            success_message = "🎉 <b>Анкета создана! Вы первый!</b>"
+            
+            await state.clear()
+            
+            await message.answer(
+                f"{success_message}\n\n"
+                f"📊 <b>Статус:</b> Вы первый, кто заполнил анкету для знакомств!\n"
+                f"⏳ <b>Ожидание:</b> Как только другие участники добавят свои анкеты, я вам сообщу.\n\n"
+                f"<i>Следите за уведомлениями от бота!</i>",
+                reply_markup=get_networking_main_keyboard(),
+                parse_mode="HTML"
+            )
+            return
+        
+        await notify_waiting_users(profile, bot)
     
     await state.clear()
     
-    # Формируем сводку анкеты
     summary = (
         f"{success_message}\n\n"
         f"<b>Имя:</b> {data['name']}\n"
@@ -352,16 +435,27 @@ async def process_contact_consent(message: types.Message, state: FSMContext):
         f"<b>Контакты:</b> {consent_text}\n\n"
     )
     
-    if not data.get('username') and contact_consent:
-        summary += "⚠️ <i>Вы не указали username, другие участники не смогут вам написать</i>\n\n"
+    available_count = await sync_to_async(
+        NetworkingProfile.objects.filter(is_visible=True)
+        .exclude(user=user)
+        .count
+    )()
     
-    summary += "Теперь вы можете искать собеседников!"
+    if available_count > 0:
+        summary += f"🎯 <b>Уже есть {available_count} анкет для просмотра!</b>\n"
+        summary += "Нажмите «👀 Найти собеседников» чтобы начать общение.\n"
+    else:
+        summary += "🎯 Пока вы единственный участник. Ждем других!\n"
+    
+    if not data.get('username') and contact_consent:
+        summary += "\n⚠️ <i>Вы не указали username, другие участники не смогут вам написать</i>\n\n"
     
     await message.answer(
         summary,
         reply_markup=get_networking_main_keyboard(),
         parse_mode="HTML"
     )
+
 
 @router.message(lambda message: message.text and "👀 Найти собеседников" in message.text)
 async def start_browsing_profiles(message: types.Message, state: FSMContext):
@@ -893,16 +987,56 @@ async def toggle_contact_consent(message: types.Message):
 async def refresh_search(message: types.Message, state: FSMContext):
     user = await sync_to_async(User.objects.get)(telegram_id=str(message.from_user.id))
     
+    # Получаем профиль пользователя
+    user_profile = await sync_to_async(
+        lambda: NetworkingProfile.objects.filter(user=user).first()
+    )()
+    
+    if not user_profile:
+        await message.answer(
+            "❌ У вас нет анкеты для участия в знакомствах!",
+            reply_markup=get_networking_main_keyboard()
+        )
+        return
+    
+    # Проверяем, есть ли новые анкеты с момента последнего поиска
+    viewed_profiles = await sync_to_async(list)(
+        NetworkingInteraction.objects.filter(viewer=user).values_list('profile_id', flat=True)
+    )
+    
+    new_profiles_count = await sync_to_async(
+        NetworkingProfile.objects.filter(
+            is_visible=True
+        ).exclude(
+            user=user
+        ).exclude(
+            id__in=viewed_profiles
+        ).count
+    )()
+    
+    # Удаляем историю просмотров
     await sync_to_async(
         NetworkingInteraction.objects.filter(viewer=user).delete
     )()
     
+    if new_profiles_count > 0:
+        message_text = (
+            f"🔄 <b>Поиск обновлен!</b>\n\n"
+            f"Найдено <b>{new_profiles_count}</b> новых анкет!\n"
+            f"Теперь вы можете просмотреть все доступные анкеты с самого начала."
+        )
+    else:
+        message_text = (
+            "🔄 <b>Поиск обновлен!</b>\n\n"
+            "Пока нет новых анкет. Возвращайтесь позже!"
+        )
+    
     await message.answer(
-        "🔄 <b>Поиск обновлен!</b>\n\n"
-        "Теперь вы снова можете просматривать все доступные анкеты.",
+        message_text,
         reply_markup=get_networking_main_keyboard(),
         parse_mode="HTML"
     )
+
 
 @router.message(F.text == "Назад")
 async def networking_back(message: types.Message, state: FSMContext):

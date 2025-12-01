@@ -47,7 +47,9 @@ async def show_speaker_questions(message: types.Message, state: FSMContext):
 
         for talk in talks:
             questions = await sync_to_async(list)(
-                Question.objects.filter(talk=talk).order_by("-created_at")
+                Question.objects.filter(talk=talk)
+                .select_related('from_user')
+                .order_by("-created_at")
             )
 
             if questions:
@@ -80,12 +82,19 @@ async def show_speaker_questions(message: types.Message, state: FSMContext):
                     else:
                         question_time_moscow = question.created_at.astimezone(moscow_tz)
                     
+                    # Формируем информацию о пользователе
+                    user_info = ""
+                    if question.from_user.username:
+                        user_info = f"👤 @{question.from_user.username}"
+                    else:
+                        user_info = f"👤 {question.from_user.first_name}"
+                    
                     answer_status = (
                         "✅ Отвечен" if question.is_answered else "⏳ Ожидает ответа"
                     )
                     questions_text += f"   {i}. {answer_status}\n"
                     questions_text += f"      💬 {question.text}\n"
-                    questions_text += f"      📅 {question_time_moscow.strftime('%d.%m %H:%M')}\n\n"
+                    questions_text += f"      {user_info} | 📅 {question_time_moscow.strftime('%d.%m %H:%M')}\n\n"
 
                 if len(questions) > 3:
                     questions_text += f"   ... и еще {len(questions) - 3} вопросов\n\n"
@@ -161,8 +170,15 @@ async def handle_question_response(message: types.Message, state: FSMContext):
                 else question.text
             )
             
+            # Добавляем username в текст кнопки
+            user_display = ""
+            if question.from_user.username:
+                user_display = f"@{question.from_user.username}"
+            else:
+                user_display = question.from_user.first_name[:15]
+            
             keyboard.button(
-                text=f"{i}. {question_preview} ({question_time_moscow.strftime('%H:%M')})",
+                text=f"{i}. {user_display}: {question_preview} ({question_time_moscow.strftime('%H:%M')})",
                 callback_data=f"answer_question_{question.id}"
             )
         
@@ -198,6 +214,13 @@ async def select_question_for_answer(callback: types.CallbackQuery, state: FSMCo
         else:
             question_time_moscow = question.created_at.astimezone(moscow_tz)
         
+        # Формируем информацию о пользователе
+        user_info = ""
+        if question.from_user.username:
+            user_info = f"👤 @{question.from_user.username}"
+        else:
+            user_info = f"👤 {question.from_user.first_name}"
+        
         await state.set_state(AnswerStates.waiting_for_answer)
         await state.update_data(
             question_id=question.id,
@@ -207,7 +230,8 @@ async def select_question_for_answer(callback: types.CallbackQuery, state: FSMCo
         question_text = (
             f"❓ <b>Вопрос от участника:</b>\n\n"
             f"💬 {question.text}\n"
-            f"📅 {question_time_moscow.strftime('%d.%m %H:%M')}\n\n"
+            f"📅 {question_time_moscow.strftime('%d.%m %H:%M')}\n"
+            f"{user_info}\n\n"
             f"✍️ <b>Введите ваш ответ:</b>\n"
             f"(Ответ будет отправлен участнику)"
         )
@@ -252,10 +276,17 @@ async def process_answer(message: types.Message, state: FSMContext, bot: Bot):
         question_id = user_data.get('question_id')
         user_id = user_data.get('user_id')
         
-        question = await sync_to_async(Question.objects.get)(id=question_id)
+        question = await sync_to_async(Question.objects.select_related('from_user').get)(id=question_id)
         
         question.is_answered = True
         await sync_to_async(question.save)()
+        
+        # Формируем информацию о пользователе для уведомления
+        user_display = ""
+        if question.from_user.username:
+            user_display = f"@{question.from_user.username}"
+        else:
+            user_display = question.from_user.first_name
         
         try:
             answer_message = (
@@ -272,7 +303,7 @@ async def process_answer(message: types.Message, state: FSMContext, bot: Bot):
             )
             
             success_text = (
-                f"✅ <b>Ответ отправлен!</b>\n\n"
+                f"✅ <b>Ответ отправлен пользователю {user_display}!</b>\n\n"
                 f"💬 <b>Вопрос:</b> {question.text}\n"
                 f"📝 <b>Ваш ответ:</b> {answer_text}\n\n"
                 f"Участник получил ваше сообщение."
@@ -286,7 +317,7 @@ async def process_answer(message: types.Message, state: FSMContext, bot: Bot):
             
         except Exception as e:
             error_text = (
-                f"✅ <b>Ответ сохранен, но не отправлен участнику</b>\n\n"
+                f"✅ <b>Ответ сохранен, но не отправлен участнику {user_display}</b>\n\n"
                 f"💬 <b>Вопрос:</b> {question.text}\n"
                 f"📝 <b>Ваш ответ:</b> {answer_text}\n\n"
                 f"⚠️ Участник, возможно, заблокировал бота."
